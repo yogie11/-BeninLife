@@ -1,0 +1,112 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+<title>BeninLife Ultimate</title>
+<style>
+*{box-sizing:border-box}html,body{margin:0;width:100%;height:100%;overflow:hidden;background:#070a12;color:#fff;font-family:system-ui,-apple-system,Segoe UI,sans-serif}
+button{border:0;border-radius:10px;padding:9px 12px;font-weight:800;cursor:pointer;background:#ffb72b;color:#111}
+button.secondary{background:#273450;color:#fff}.hud{position:fixed;z-index:5;top:10px;left:10px;right:10px;display:flex;justify-content:space-between;pointer-events:none}.hud>*{pointer-events:auto}
+.panel{background:#11192aee;border:1px solid #33415f;border-radius:14px;padding:10px;box-shadow:0 8px 25px #0008}.stats{display:flex;gap:7px;flex-wrap:wrap}.stat{min-width:86px}.stat small{color:#9aa9c5}.stat b{display:block}.money{color:#43db89}.wanted{color:#ff6476}
+#game{position:absolute;inset:0;width:100%;height:100%;background:#16222b}
+#minimap{position:fixed;right:12px;bottom:12px;width:180px;height:130px;border:2px solid #66718b;border-radius:12px;background:#0d1420dd;z-index:6}
+.controls{position:fixed;left:12px;bottom:12px;z-index:7;display:grid;grid-template-columns:repeat(3,50px);gap:6px}.controls button{height:45px;padding:0;font-size:18px}
+.actions{position:fixed;right:205px;bottom:12px;z-index:7;display:flex;gap:6px;flex-wrap:wrap;max-width:400px}
+.toast{position:fixed;top:100px;left:50%;transform:translateX(-50%);z-index:20;background:#101828ed;padding:12px 18px;border-radius:12px;border:1px solid #41506e;display:none}
+.modal{position:fixed;inset:0;background:#000b;z-index:30;display:none;align-items:center;justify-content:center;padding:15px}.modal.show{display:flex}
+.card{width:min(650px,100%);max-height:85vh;overflow:auto;background:#11192a;border:1px solid #34415d;border-radius:18px;padding:18px}.row{display:flex;justify-content:space-between;gap:10px;align-items:center;border-bottom:1px solid #293650;padding:10px 0}.muted{color:#9aa9c5}.tag{display:inline-block;background:#263452;border-radius:99px;padding:4px 8px;font-size:11px;margin:2px}.bar{height:7px;background:#2b3750;border-radius:99px;overflow:hidden}.bar i{display:block;height:100%;background:#ffb72b}
+.phone{position:fixed;right:12px;top:75px;width:300px;z-index:15;display:none}.phone.show{display:block}.phone .screen{background:#0c1220;border-radius:25px;padding:14px;border:4px solid #303a52}.apps{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:10px}.apps button{background:#202d49;color:#fff;min-height:55px}
+.start{position:fixed;inset:0;background:radial-gradient(circle at 50% 30%,#263b55,#080c15 65%);display:flex;align-items:center;justify-content:center;z-index:100}.startbox{width:min(560px,92%);background:#10192aee;padding:25px;border:1px solid #3c4b68;border-radius:22px}.startbox input{width:100%;padding:13px;background:#0b1220;color:#fff;border:1px solid #34415d;border-radius:10px;margin:7px 0 12px}
+@media(max-width:700px){.stats .stat:nth-child(n+5){display:none}.actions{right:10px;bottom:75px}.actions button{font-size:11px;padding:8px}.panel{padding:7px}.phone{width:260px}.controls{bottom:12px}}
+</style>
+</head>
+<body>
+<canvas id="game"></canvas><canvas id="minimap"></canvas>
+<div class="hud"><div class="panel"><b>BENIN<span style="color:#ffb72b">LIFE</span> ULTIMATE</b><div class="stats" id="stats"></div></div><div class="panel"><button onclick="togglePhone()">📱 Phone</button> <button class="secondary" onclick="save()">💾</button></div></div>
+<div class="actions"><button onclick="interact()">E Interact</button><button onclick="enterCar()">🚗 Vehicle</button><button onclick="rest()">😴 Rest</button><button onclick="togglePhone()">📱</button></div>
+<div class="controls"><span></span><button onpointerdown="keys.up=true" onpointerup="keys.up=false">▲</button><span></span><button onpointerdown="keys.left=true" onpointerup="keys.left=false">◀</button><button onpointerdown="keys.down=true" onpointerup="keys.down=false">▼</button><button onpointerdown="keys.right=true" onpointerup="keys.right=false">▶</button></div>
+<div class="toast" id="toast"></div>
+<div class="phone" id="phone"><div class="screen"><h2>📱 BeninLife Phone</h2><p class="muted" id="phoneTime"></p><div class="apps">
+<button onclick="phoneBank()">🏦 Bank</button><button onclick="phoneJobs()">💼 Jobs</button><button onclick="phoneMap()">🗺️ Map</button>
+<button onclick="phonePeople()">❤️ People</button><button onclick="phoneMissions()">🎯 Missions</button><button onclick="closePhone()">✕ Close</button>
+</div></div></div>
+<div class="modal" id="modal"><div class="card" id="modalContent"></div></div>
+<div class="start" id="start"><div class="startbox"><h1>BENIN<span style="color:#ffb72b">LIFE</span> ULTIMATE</h1><p class="muted">An original open-city life simulator set in a fictionalized Benin City.</p><label>Character name</label><input id="name" placeholder="Enter your name"><button style="width:100%" onclick="startGame()">Enter Benin City</button><button class="secondary" style="width:100%;margin-top:8px" onclick="load()">Load saved life</button><p class="muted">Move with WASD/arrow keys. Explore, work, drive, buy assets, build relationships and grow your empire.</p></div></div>
+
+<script>
+const canvas=document.getElementById('game'),ctx=canvas.getContext('2d'),mini=document.getElementById('minimap'),mx=mini.getContext('2d');
+let W,H,keys={up:false,down:false,left:false,right:false},last=0,near=null;
+const WORLD={w:3200,h:2400};
+const places=[
+{x:420,y:400,w:500,h:320,n:'Ring Road Plaza',type:'shop',color:'#654d37'},
+{x:1150,y:300,w:430,h:300,n:'University District',type:'school',color:'#3d654c'},
+{x:2150,y:350,w:550,h:330,n:'GRA Estates',type:'house',color:'#695b75'},
+{x:420,y:1050,w:520,h:330,n:'New Benin Market',type:'market',color:'#7a5b32'},
+{x:1200,y:980,w:480,h:300,n:'Airport Road',type:'business',color:'#4b596b'},
+{x:2050,y:1050,w:560,h:320,n:'Nightlife Strip',type:'club',color:'#603d6e'},
+{x:380,y:1730,w:550,h:350,n:'Ekewan Workshops',type:'garage',color:'#515a52'},
+{x:1200,y:1690,w:530,h:370,n:'Sapele Road',type:'car',color:'#565047'},
+{x:2150,y:1730,w:620,h:350,n:'Upper Mission',type:'house',color:'#4c604b'}
+];
+const roads=[{x:0,y:720,w:3200,h:110},{x:0,y:1450,w:3200,h:110},{x:950,y:0,w:120,h:2400},{x:1900,y:0,w:120,h:2400}];
+const carModels=[['Toyota Corolla',2200000,90,4],['Honda Accord',3500000,100,5],['Lexus RX',12500000,115,8],['Mercedes C-Class',18500000,125,10]];
+const businesses=[['POS Stand',180000,22000],['Laundry',750000,65000],['Phone Shop',1500000,110000],['Restaurant',4500000,250000],['Car Dealership',18000000,850000],['Media Agency',8000000,380000]];
+const people=[['Amaka','Friend','social'],['Osaro','Business Contact','network'],['Mimi','Romance','love'],['Daniel','Rival','rival'],['Efe','Mentor','mentor']];
+const jobs=[['Delivery Rider',9000,15],['Radio Assistant',12000,14],['Social Media Manager',17000,13],['Freelance Designer',22000,15],['Car Broker',30000,18],['Real Estate Agent',45000,21],['Event Promoter',26000,17],['Junior Accountant',28000,14]];
+let g=null;
+
+function resize(){W=canvas.width=innerWidth;H=canvas.height=innerHeight;mini.width=180;mini.height=130}addEventListener('resize',resize);resize();
+function startGame(){let name=document.getElementById('name').value.trim()||'Miracle';g={name,x:1000,y:800,angle:0,cash:75000,bank:0,energy:100,health:100,fun:60,rep:5,love:0,network:0,skill:0,education:0,day:1,hour:8,minute:0,wanted:0,vehicle:null,driving:false,cars:[],house:null,businesses:[],logs:[],missions:[['First Hustle',50000,0,20000],['Reach ₦1 Million',1000000,0,100000],['Build Reputation',30,0,60000],['Buy a Vehicle',1,0,50000],['Buy Property',1,0,100000]],missionDone:[]};log('You arrived in Benin City.');document.getElementById('start').style.display='none';save(false)}
+function save(){localStorage.setItem('beninlifeUltimate',JSON.stringify(g));toast('Game saved')}
+function load(){let s=localStorage.getItem('beninlifeUltimate');if(!s){toast('No saved game');return}g=JSON.parse(s);document.getElementById('start').style.display='none';toast('Saved life loaded')}
+function log(t){g.logs.unshift(`Day ${g.day}, ${String(Math.floor(g.hour)).padStart(2,'0')}:${String(g.minute).padStart(2,'0')} — ${t}`);g.logs=g.logs.slice(0,70)}
+function toast(t){let e=document.getElementById('toast');e.textContent=t;e.style.display='block';clearTimeout(window.tt);window.tt=setTimeout(()=>e.style.display='none',2200)}
+function money(n){return '₦'+Math.max(0,Math.round(n)).toLocaleString()}
+function nearPlace(){near=null;let best=110;for(const p of places){let d=Math.hypot(g.x-(p.x+p.w/2),g.y-(p.y+p.h/2));if(d<best){best=d;near=p}}}
+function update(dt){if(!g)return;let speed=g.driving?(g.vehicle?.[2]||100):4.1;let dx=(keys.right-keys.left)*speed*dt,dy=(keys.down-keys.up)*speed*dt;if(dx||dy){g.x=Math.max(20,Math.min(WORLD.w-20,g.x+dx));g.y=Math.max(20,Math.min(WORLD.h-20,g.y+dy));g.minute+=dt*3;if(g.driving)g.energy-=dt*.25}
+g.minute+=dt*.8;if(g.minute>=60){g.minute-=60;g.hour++;if(g.hour>=24){g.hour=0;g.day++;daily();}}nearPlace();updatePolice(dt);checkMissions();renderHUD()}
+function daily(){g.energy=Math.min(100,g.energy+25);g.health=Math.min(100,g.health+3);let income=g.businesses.reduce((a,b)=>a+b[2],0);g.cash+=income;if(income)log(`Business income: ${money(income)}.`);if(Math.random()<.22)randomEvent()}
+function updatePolice(dt){if(g.wanted>0){g.wanted=Math.max(0,g.wanted-dt*.015)}}
+function moveKey(e,on){let k=e.key.toLowerCase();if(['w','arrowup'].includes(k))keys.up=on;if(['s','arrowdown'].includes(k))keys.down=on;if(['a','arrowleft'].includes(k))keys.left=on;if(['d','arrowright'].includes(k))keys.right=on;if(on&&k==='e')interact();if(on&&k==='f')enterCar();if(on&&k==='p')togglePhone()}addEventListener('keydown',e=>moveKey(e,true));addEventListener('keyup',e=>moveKey(e,false));
+function render(){if(!g)return;ctx.clearRect(0,0,W,H);let camX=g.x-W/2,camY=g.y-H/2;ctx.fillStyle='#173323';ctx.fillRect(0,0,W,H);
+for(const r of roads){ctx.fillStyle='#34383e';ctx.fillRect(r.x-camX,r.y-camY,r.w,r.h);ctx.strokeStyle='#9c8f62';ctx.setLineDash([25,22]);ctx.lineWidth=3;if(r.w>r.h){ctx.beginPath();ctx.moveTo(r.x-camX,r.y+r.h/2-camY);ctx.lineTo(r.x+r.w-camX,r.y+r.h/2-camY)}else{ctx.beginPath();ctx.moveTo(r.x+r.w/2-camX,r.y-camY);ctx.lineTo(r.x+r.w/2-camX,r.y+r.h-camY)}ctx.stroke();ctx.setLineDash([])}
+for(const p of places){ctx.fillStyle=p.color;ctx.fillRect(p.x-camX,p.y-camY,p.w,p.h);ctx.fillStyle='#fff';ctx.font='bold 15px system-ui';ctx.fillText(p.n,p.x+10-camX,p.y+25-camY)}
+for(let i=0;i<18;i++){let tx=(i*421)%WORLD.w,ty=(i*733)%WORLD.h;ctx.fillStyle='#24502e';ctx.beginPath();ctx.arc(tx-camX,ty-camY,24,0,7);ctx.fill()}
+if(g.vehicle&&g.driving){ctx.save();ctx.translate(g.x-camX,g.y-camY);ctx.rotate(g.angle);ctx.fillStyle='#d43b3b';ctx.fillRect(-20,-10,40,20);ctx.fillStyle='#b8d6e8';ctx.fillRect(-5,-8,12,16);ctx.restore()}else{ctx.fillStyle='#ffb72b';ctx.beginPath();ctx.arc(g.x-camX,g.y-camY,12,0,7);ctx.fill();ctx.fillStyle='#111';ctx.beginPath();ctx.arc(g.x-camX,g.y-17-camY,5,0,7);ctx.fill()}
+if(near){ctx.fillStyle='#fff';ctx.font='bold 13px system-ui';ctx.fillText('E: '+near.n,g.x-camX-45,g.y-camY-30)}
+drawMini();requestAnimationFrame(render)}
+function drawMini(){mx.fillStyle='#101a25';mx.fillRect(0,0,180,130);mx.fillStyle='#37404a';for(const r of roads)mx.fillRect(r.x/WORLD.w*180,r.y/WORLD.h*130,Math.max(3,r.w/WORLD.w*180),Math.max(3,r.h/WORLD.h*130));for(const p of places){mx.fillStyle=p.color;mx.fillRect(p.x/WORLD.w*180,p.y/WORLD.h*130,p.w/WORLD.w*180,p.h/WORLD.h*130)}mx.fillStyle='#ffb72b';mx.beginPath();mx.arc(g.x/WORLD.w*180,g.y/WORLD.h*130,4,0,7);mx.fill()}
+function renderHUD(){if(!g)return;document.getElementById('stats').innerHTML=`<div class="stat"><small>Cash</small><b class="money">${money(g.cash)}</b></div><div class="stat"><small>Bank</small><b>${money(g.bank)}</b></div><div class="stat"><small>HP</small><b>${Math.round(g.health)}%</b></div><div class="stat"><small>Energy</small><b>${Math.round(g.energy)}%</b></div><div class="stat"><small>Rep</small><b>${g.rep}</b></div><div class="stat"><small>Wanted</small><b class="wanted">${g.wanted.toFixed(1)}</b></div><div class="stat"><small>Time</small><b>${String(Math.floor(g.hour)).padStart(2,'0')}:${String(Math.floor(g.minute)).padStart(2,'0')}</b></div>`;document.getElementById('phoneTime').textContent=`Day ${g.day} • ${String(Math.floor(g.hour)).padStart(2,'0')}:${String(Math.floor(g.minute)).padStart(2,'0')}`}
+function interact(){if(!g)return;nearPlace();if(!near){toast('Nothing nearby');return}if(near.type==='shop'||near.type==='market'){shop()}else if(near.type==='school'){school()}else if(near.type==='house'){propertyMenu()}else if(near.type==='business'){businessMenu()}else if(near.type==='club'){club()}else if(near.type==='garage'||near.type==='car'){garage()}else{toast('You explore the area.')}}
+function enterCar(){if(!g)return;if(g.driving){g.driving=false;toast('You parked the vehicle');return}if(!g.vehicle){garage();return}g.driving=true;toast('You are driving. Use WASD / arrows.')}
+function rest(){g.energy=Math.min(100,g.energy+35);g.health=Math.min(100,g.health+5);g.fun-=2;log('Rested and recovered.');toast('Energy restored')}
+function modal(title,body){document.getElementById('modalContent').innerHTML=`<h2>${title}</h2>${body}<br><button class="secondary" onclick="closeModal()">Close</button>`;document.getElementById('modal').classList.add('show')}
+function closeModal(){$('modal').classList.remove('show')}
+function shop(){modal('🛍️ Shops & Market',`<p class="muted">Spend some cash and enjoy the city.</p><div class="row"><b>Food</b><button onclick="buy(250,'You bought food. Health +3',()=>g.health+=3)">₦250</button></div><div class="row"><b>New Outfit</b><button onclick="buy(8000,'You upgraded your style. Reputation +3',()=>g.rep+=3)">₦8,000</button></div><div class="row"><b>Phone Upgrade</b><button onclick="buy(25000,'Your phone is upgraded. Network +5',()=>g.network+=5)">₦25,000</button></div>`)}
+function buy(cost,msg,fn){if(g.cash<cost){toast('Not enough cash');return}g.cash-=cost;fn();log(msg);closeModal();renderHUD()}
+function school(){modal('🎓 University / Learning',`<p>Improve your education and unlock better opportunities.</p><div class="row"><span>Short course</span><button onclick="buy(5000,'Education +10',()=>{g.education+=10;g.skill+=4})">₦5,000</button></div><div class="row"><span>Professional certification</span><button onclick="buy(30000,'Education +25',()=>{g.education+=25;g.skill+=12})">₦30,000</button></div>`)}
+function club(){if(g.cash<5000){toast('You need ₦5,000 for a night out');return}g.cash-=5000;g.fun=Math.min(100,g.fun+20);g.love+=2;g.network+=3;log('You went out for the night.');toast('Good night out')}
+function garage(){let html=`<p class="muted">Current vehicle: ${g.vehicle?g.vehicle[0]:'None'}</p>`;for(const c of carModels)html+=`<div class="row"><div><b>🚗 ${c[0]}</b><br><span class="muted">${money(c[1])} • speed ${c[2]}</span></div><button onclick="buyCar('${c[0]}')">Buy</button></div>`;modal('🚘 Garage',html)}
+function buyCar(name){let c=carModels.find(x=>x[0]===name);if(g.cash<c[1]){toast('Not enough money');return}g.cash-=c[1];g.vehicle=c;g.cars.push(c);g.rep+=c[3];g.missions[3][2]=1;log(`Bought ${c[0]}.`);closeModal();toast('Vehicle purchased')}
+function propertyMenu(){let choices=[['Self-Contain Apartment',1200000,18000],['2-Bedroom Flat',6500000,75000],['Modern Duplex',28000000,180000]];let html='<p class="muted">Build your home and status.</p>';for(const p of choices)html+=`<div class="row"><div><b>🏠 ${p[0]}</b><br><span class="muted">${money(p[1])} • rent potential ${money(p[2])}</span></div><button onclick="buyProperty('${p[0]}',${p[1]})">Buy</button></div>`;modal('🏠 Property',html)}
+function buyProperty(name,cost){if(g.cash<cost){toast('Not enough money');return}g.cash-=cost;g.house=name;g.rep+=6;g.missions[4][2]=1;log(`Bought ${name}.`);closeModal();toast('Property acquired')}
+function businessMenu(){let html='<p class="muted">Businesses generate income each in-game day.</p>';for(const b of businesses)html+=`<div class="row"><div><b>🏪 ${b[0]}</b><br><span class="muted">${money(b[1])} startup • ${money(b[2])}/day</span></div><button onclick="buyBusiness('${b[0]}')">Launch</button></div>`;modal('🏪 Business Empire',html)}
+function buyBusiness(name){let b=businesses.find(x=>x[0]===name);if(g.businesses.some(x=>x[0]===name)){toast('You already own it');return}if(g.cash<b[1]){toast('Not enough startup capital');return}g.cash-=b[1];g.businesses.push(b);g.rep+=6;log(`Started ${name}.`);closeModal();toast('Business launched')}
+function phoneBank(){modal('🏦 Bank',`<p>Cash: <b>${money(g.cash)}</b><br>Bank: <b>${money(g.bank)}</b></p><div class="row"><button onclick="deposit(10000)">Deposit ₦10k</button><button onclick="withdraw(10000)">Withdraw ₦10k</button></div><p class="muted">Banking keeps your money safer from random setbacks.</p>`)}
+function deposit(n){if(g.cash<n){toast('Not enough cash');return}g.cash-=n;g.bank+=n;closeModal();toast('Money deposited')}
+function withdraw(n){if(g.bank<n){toast('Not enough bank balance');return}g.bank-=n;g.cash+=n;closeModal();toast('Money withdrawn')}
+function phoneJobs(){let html='<h3>Available Jobs</h3>';jobs.forEach(j=>html+=`<div class="row"><span>${j[0]}<br><small class="muted">${money(j[1])}</small></span><button onclick="doJob('${j[0]}')">Work</button></div>`);modal('💼 Jobs',html)}
+function doJob(name){let j=jobs.find(x=>x[0]===name);if(g.energy<j[2]){toast('Too tired');return}g.energy-=j[2];g.cash+=j[1];g.rep+=1;g.skill+=2;log(`Worked as ${name} for ${money(j[1])}.`);closeModal();toast('Payment received')}
+function phoneMap(){closeModal();toast('Use the live map and minimap to navigate')}
+function phonePeople(){let html='';people.forEach(p=>html+=`<div class="row"><div><b>${p[0]}</b> <span class="tag">${p[1]}</span><br><small class="muted">Build this relationship through conversations and visits.</small></div><button onclick="talk('${p[0]}')">Talk</button></div>`);modal('❤️ People',html)}
+function talk(name){let p=people.find(x=>x[0]===name);if(g.energy<6){toast('Too tired');return}g.energy-=6;if(p[2]==='love')g.love+=6;else if(p[2]==='network')g.network+=5;else if(p[2]==='mentor')g.skill+=4;else if(p[2]==='rival')g.rep+=1;else g.social=(g.social||0)+3;log(`You spent time with ${name}.`);closeModal();toast(`Relationship with ${name} changed`)}
+function phoneMissions(){let html='';for(const m of g.missions){let prog=m[2];if(m[0]==='First Hustle')prog=Math.min(m[1],g.cash);if(m[0]==='Reach ₦1 Million')prog=Math.min(m[1],g.cash+g.bank);if(m[0]==='Build Reputation')prog=Math.min(m[1],g.rep);let done=g.missionDone.includes(m[0]);if(prog>=m[1]&&!done){g.cash+=m[3];g.missionDone.push(m[0]);log(`Mission complete: ${m[0]} + ${money(m[3])}.`);done=true}html+=`<div class="row"><div><b>${m[0]}</b><br><small class="muted">${Math.min(prog,m[1]).toLocaleString()} / ${m[1].toLocaleString()}</small><div class="bar"><i style="width:${Math.min(100,prog/m[1]*100)}%"></i></div></div><span>${done?'✅':money(m[3])}</span></div>`}modal('🎯 Missions',html)}
+function togglePhone(){document.getElementById('phone').classList.toggle('show')}
+function closePhone(){document.getElementById('phone').classList.remove('show')}
+function $(id){return document.getElementById(id)}
+function randomEvent(){let r=Math.random();if(r<.5){g.cash+=5000;g.rep+=2;log('A useful stranger referred a small job to you.')}else{g.cash=Math.max(0,g.cash-3000);log('Unexpected expenses hit your budget.')}}
+let old=performance.now();function loop(t){let dt=Math.min(.05,(t-old)/1000);old=t;update(dt);requestAnimationFrame(loop)}requestAnimationFrame(loop);render();renderHUD();
+</script>
+</body>
+</html>
